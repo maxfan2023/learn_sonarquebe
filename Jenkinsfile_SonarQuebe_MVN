@@ -1,0 +1,87 @@
+pipeline {
+    agent any
+
+    options {
+        skipDefaultCheckout(true)
+        disableConcurrentBuilds()
+    }
+
+    tools {
+        jdk 'JDK21'
+        maven 'Maven3.9'
+    }
+
+    environment {
+        PROJECT_DIR = '/host_projects/sonarjava03'
+        SONAR_HOST_URL = 'http://host.docker.internal:9000'
+    }
+
+    stages {
+        stage('Verify environment') {
+            steps {
+                sh 'java -version'
+                sh 'mvn -version'
+                sh 'ls -la "$PROJECT_DIR"'
+            }
+        }
+
+        stage('Checkout') {
+            steps {
+            checkout scm
+        }}
+
+//        stage('Compile') {
+//            steps {
+//                sh 'cd "$PROJECT_DIR" && mvn -DskipTests compile'
+//            }
+//        }
+        stage('Build & Test') {
+            steps {
+                sh 'cd "$PROJECT_DIR" && mvn clean package -DskipTests '
+            }
+        }
+        stage('SonarQube scan(mvn)') {
+            steps {
+                script {
+                    def scannerHome = tool 'SonarQubeSacnnerServer'
+
+                    withSonarQubeEnv('sonarjava03_server') {
+                        withCredentials([string(credentialsId: 'sonarjava04_credentials', variable: 'SONAR_TOKEN')]) {
+
+                                sh '''
+                                        cd "${PROJECT_DIR}"
+                                        rm -f "${WORKSPACE}/report-task.txt"
+
+                                        curl -fsS \
+                                          -H "Authorization: Bearer ${SONAR_TOKEN}" \
+                                          "${SONAR_HOST_URL}/api/authentication/validate"
+
+                                        mvn clean verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
+                                            -Dsonar.projectKey=sonarjava04 \
+                                            -Dsonar.projectName='sonarjava04'
+                                            -Dsonar.host.url="${SONAR_HOST_URL}" \
+                                            -Dsonar.token="${SONAR_TOKEN}"
+                                '''
+
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    script {
+                        def qg = waitForQualityGate abortPipeline: false
+                        echo "Quality Gate status: ${qg.status}"
+
+                        if (qg.status != 'OK') {
+                            unstable("Quality Gate status: ${qg.status}")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
