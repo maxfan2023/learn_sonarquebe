@@ -31,12 +31,16 @@ pipeline {
             checkout scm
         }}
 
-        stage('Compile') {
+//        stage('Compile') {
+//            steps {
+//                sh 'cd "$PROJECT_DIR" && mvn -DskipTests compile'
+//            }
+//        }
+        stage('Build & Test') {
             steps {
-                sh 'cd "$PROJECT_DIR" && mvn -DskipTests compile'
+                sh 'cd "$PROJECT_DIR" && mvn clean package -DskipTests '
             }
         }
-
         stage('SonarQube scan') {
             steps {
                 script {
