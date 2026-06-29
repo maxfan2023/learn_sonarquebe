@@ -56,11 +56,13 @@ pipeline {
                                           -H "Authorization: Bearer ${SONAR_TOKEN}" \
                                           "${SONAR_HOST_URL}/api/authentication/validate"
 
-                                        mvn clean verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
+                                        mvn -B clean verify org.sonarsource.scanner.maven:sonar-maven-plugin:5.7.0.6970:sonar \
                                             -Dsonar.projectKey=sonarjava04 \
-                                            -Dsonar.projectName='sonarjava04'
+                                            -Dsonar.projectName=sonarjava04 \
                                             -Dsonar.host.url="${SONAR_HOST_URL}" \
                                             -Dsonar.token="${SONAR_TOKEN}"
+
+                                        cp target/sonar/report-task.txt "${WORKSPACE}/report-task.txt"
                                 '''
 
                         }
