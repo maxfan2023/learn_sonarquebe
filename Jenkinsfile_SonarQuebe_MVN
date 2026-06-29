@@ -45,7 +45,7 @@ pipeline {
                 script {
                     def scannerHome = tool 'SonarQubeSacnnerServer'
 
-                    withSonarQubeEnv(installationName: 'sonarjava03_server', credentialsId: 'sonarjava04_credentials') {
+                    withSonarQubeEnv(installationName: 'sonarjava04_server', credentialsId: 'sonarjava04_credentials') {
                         withCredentials([string(credentialsId: 'sonarjava04_credentials', variable: 'SONAR_TOKEN')]) {
 
                                 sh '''
@@ -73,62 +73,13 @@ pipeline {
 
         stage('Quality Gate') {
             steps {
-                withCredentials([string(credentialsId: 'sonarjava04_credentials', variable: 'SONAR_TOKEN')]) {
+                timeout(time: 5, unit: 'MINUTES') {
                     script {
-                        def qgStatus = sh(
-                            returnStdout: true,
-                            script: '''
-                                set -eu
+                        def qg = waitForQualityGate abortPipeline: false, credentialsId: 'sonarjava04_credentials'
+                        echo "Quality Gate status: ${qg.status}"
 
-                                ce_task_url="$(awk -F= '/^ceTaskUrl=/{print $2}' "${WORKSPACE}/report-task.txt")"
-                                if [ -z "${ce_task_url}" ]; then
-                                    echo "Missing ceTaskUrl in ${WORKSPACE}/report-task.txt" >&2
-                                    exit 1
-                                fi
-
-                                ce_status=""
-                                ce_json=""
-                                for _ in $(seq 1 60); do
-                                    ce_json="$(curl -fsS -H "Authorization: Bearer ${SONAR_TOKEN}" "${ce_task_url}")"
-                                    ce_status="$(printf '%s' "${ce_json}" | sed -n 's/.*"status":"\\([^"]*\\)".*/\\1/p')"
-                                    echo "Sonar CE task status: ${ce_status}" >&2
-
-                                    if [ "${ce_status}" = "SUCCESS" ]; then
-                                        break
-                                    fi
-                                    if [ "${ce_status}" = "FAILED" ] || [ "${ce_status}" = "CANCELED" ]; then
-                                        echo "${ce_json}" >&2
-                                        exit 1
-                                    fi
-
-                                    sleep 5
-                                done
-
-                                if [ "${ce_status}" != "SUCCESS" ]; then
-                                    echo "${ce_json}" >&2
-                                    exit 1
-                                fi
-
-                                analysis_id="$(printf '%s' "${ce_json}" | sed -n 's/.*"analysisId":"\\([^"]*\\)".*/\\1/p')"
-                                if [ -z "${analysis_id}" ]; then
-                                    echo "Missing analysisId in CE task response: ${ce_json}" >&2
-                                    exit 1
-                                fi
-
-                                qg_json="$(curl -fsS -H "Authorization: Bearer ${SONAR_TOKEN}" "${SONAR_HOST_URL}/api/qualitygates/project_status?analysisId=${analysis_id}")"
-                                qg_status="$(printf '%s' "${qg_json}" | sed -n 's/.*"projectStatus":{"status":"\\([^"]*\\)".*/\\1/p')"
-                                if [ -z "${qg_status}" ]; then
-                                    echo "Missing Quality Gate status in response: ${qg_json}" >&2
-                                    exit 1
-                                fi
-
-                                echo "Quality Gate status: ${qg_status}" >&2
-                                printf '%s\\n' "${qg_status}"
-                            '''
-                        ).trim()
-
-                        if (qgStatus != 'OK') {
-                            unstable("Quality Gate status: ${qgStatus}")
+                        if (qg.status != 'OK') {
+                            unstable("Quality Gate status: ${qg.status}")
                         }
                     }
                 }
